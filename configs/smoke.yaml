@@ -1,0 +1,43 @@
+# Test rapide sur CPU avec les données synthétiques (scripts/make_synthetic.py)
+seed: 0
+output_dir: runs/smoke
+data:
+  train_cache: cache_synth/mimic
+  eval_sets:
+    mimic_internal: {cache: cache_synth/mimic, split: test}
+    ptbxl_external: {cache: cache_synth/ptbxl, split: all}
+    lsas_external:  {cache: cache_synth/lsas,  split: all}
+  text_policy: masked
+  max_train_records: null
+model:
+  d_model: 64
+  signal_layers: 2
+  fusion_layers: 1
+  n_heads: 4
+  dropout: 0.1
+  text_encoder: light
+  text_model_name: emilyalsentzer/Bio_ClinicalBERT
+  text_trainable_layers: 0
+  max_text_len: 32
+train:
+  epochs: 6
+  batch_size: 32
+  num_workers: 0
+  lr: 1.0e-3
+  lr_text: 1.0e-3
+  weight_decay: 0.01
+  warmup_frac: 0.05
+  grad_clip: 1.0
+  patience: 10
+  p_drop_text: 0.4
+  p_drop_features: 0.2
+  p_drop_leads: 0.3
+  aux_weight: 0.3
+  loss: asl
+  loss_kwargs: {gamma_pos: 0.0, gamma_neg: 4.0, clip: 0.05}
+  class_weight_power: 0.5
+  val_scenarios: [full, no_text, signal_only]
+eval:
+  scenarios: [full, no_text, no_features, signal_only, text_only, features_only, limb6_no_text, leadI_no_text]
+  min_pos: 3
+  n_bootstrap: 50

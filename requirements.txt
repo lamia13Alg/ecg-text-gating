@@ -1,0 +1,12 @@
+torch>=2.2
+transformers>=4.40
+numpy
+pandas
+scipy
+scikit-learn
+wfdb>=4.1
+pyyaml
+tqdm
+matplotlib
+openpyxl
+requests

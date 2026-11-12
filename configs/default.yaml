@@ -1,0 +1,54 @@
+# Configuration principale (GPU, données réelles)
+seed: 42
+output_dir: runs/fusion_full
+
+data:
+  train_cache: cache/mimic          # produit par scripts/prepare_data.py
+  # jeux évalués par scripts/evaluate.py : nom -> (cache, split)
+  eval_sets:
+    mimic_internal: {cache: cache/mimic, split: test}
+    ptbxl_external: {cache: cache/ptbxl, split: all}
+    lsas_external:  {cache: cache/lsas,  split: all}
+  # "full" | "masked" | "none"
+  # Si les labels MIMIC viennent du compte rendu (label_source=report), utilisez
+  # "masked" : sinon l'encodeur texte lit directement la réponse (fuite).
+  text_policy: masked
+  max_train_records: null
+
+model:
+  d_model: 256
+  signal_layers: 4
+  fusion_layers: 2
+  n_heads: 8
+  dropout: 0.1
+  text_encoder: hf                    # "hf" (ClinicalBERT) | "light" (sans pré-entraînement)
+  text_model_name: emilyalsentzer/Bio_ClinicalBERT
+  text_trainable_layers: 2
+  max_text_len: 128
+
+train:
+  epochs: 30
+  batch_size: 128
+  num_workers: 8
+  lr: 3.0e-4
+  lr_text: 2.0e-5
+  weight_decay: 0.05
+  warmup_frac: 0.05
+  grad_clip: 1.0
+  patience: 5
+  # robustesse : abandon aléatoire de modalités / dérivations pendant l'entraînement
+  p_drop_text: 0.4
+  p_drop_features: 0.2
+  p_drop_leads: 0.3
+  aux_weight: 0.3                     # poids des têtes unimodales auxiliaires
+  loss: asl                           # asl | focal | bce
+  loss_kwargs: {gamma_pos: 0.0, gamma_neg: 4.0, clip: 0.05}
+  class_weight_power: 0.5
+  # score de sélection du modèle = moyenne des macro-AUROC sur ces scénarios
+  val_scenarios: [full, no_text, signal_only]
+
+eval:
+  scenarios: [full, no_text, no_features, signal_only, text_only, features_only,
+              limb6_no_text, leadI_no_text, leadsI+II_full]
+  min_pos: 10
+  n_bootstrap: 200

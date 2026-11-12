@@ -1,0 +1,113 @@
+# Should an ECG Model Read the Report?
+
+Code for the paper **"Should an ECG Model Read the Report? Annotation-Free Site-Aware Text Gating for Robust Multi-Label Classification"** (submitted to *Biomedical Signal Processing and Control*).
+
+A multi-label (11 classes) ECG model fusing the 12-lead signal, 24 derived measurements and the report text, trained on MIMIC-IV-ECG and externally validated on PTB-XL and LSAS without retraining. The repository includes:
+
+- the fusion model (CNN–Transformer signal encoder, Bio_ClinicalBERT text encoder, FT-Transformer for measurements, label-query cross-attention, learned `[ABSENT]` tokens, modality and lead dropout);
+- the leakage-aware text masking policy;
+- the **annotation-free site-level text gate** (binomial test on the disagreement between predictions with and without text);
+- calibration / threshold-transfer analyses, label audit and all figure scripts.
+
+## Repository structure
+
+```
+ecgfusion/                 Python package
+  labels.py                11-label space; rules for MIMIC reports, PTB-XL SCP codes, LSAS SNOMED-CT codes
+  signal_processing.py     filtering, resampling, 24 derived measurements
+  data/                    manifests (patient-level split), preprocessed cache, multimodal Dataset
+  model.py                 fusion model
+  losses.py                asymmetric loss, BCE
+  metrics.py               AUROC, AUPRC, F1, ECE, Brier, bootstrap CIs, temperature scaling, thresholds
+  engine.py                model construction and prediction
+scripts/
+  prepare_data.py          raw PhysioNet data -> preprocessed cache
+  train.py                 training + internal calibration
+  evaluate.py              internal / external evaluation over modality scenarios
+  analyze_preds.py         site gate, DeLong tests, calibration transfer, label-shift correction
+  make_figures.py          paper figures 2-4 and S1
+  fig_architecture.py      Figure 1
+  stt_lead_check.py        STT_ISCH lead-I analysis (Figure S2)
+  lsas_code_check.py       LSAS SNOMED-CT mapping sensitivity analysis
+  audit_sample.py          stratified sample of 200 MIMIC reports for the label audit
+  audit_score.py           weighted precision / recall of the label rules
+  audit_labels.py          rule-level audit over all reports
+  make_synthetic.py        small synthetic PhysioNet-format data to test the pipeline
+configs/                   training configurations (default, kaggle, kaggle_v2, smoke test)
+notebooks/                 the 8 Kaggle notebooks used for all experiments (+ generator script)
+audit/                     label audit: sample key and weights, annotations, cardiologist verification, results
+```
+
+## Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+Python ≥ 3.10. Training was run on one NVIDIA T4 GPU (Kaggle).
+
+## Data
+
+All three databases are openly available on PhysioNet; they are **not** redistributed here.
+
+| Database | Link | Licence |
+|---|---|---|
+| MIMIC-IV-ECG v1.0 | https://physionet.org/content/mimic-iv-ecg/1.0/ | ODbL v1.0 |
+| PTB-XL v1.0.3 | https://physionet.org/content/ptb-xl/1.0.3/ | CC BY 4.0 |
+| LSAS (large-scale 12-lead arrhythmia database) | https://physionet.org/content/ecg-arrhythmia/1.0.0/ | CC BY 4.0 |
+
+If you use these data, please cite the dataset records and original publications requested on each PhysioNet page, and PhysioNet (Pollard et al., 2026).
+
+## Quick test (synthetic data, CPU, ~5 min)
+
+```bash
+python scripts/make_synthetic.py --out synthetic
+python scripts/prepare_data.py --dataset mimic --root synthetic/mimic --out cache_synth/mimic --workers 1
+python scripts/prepare_data.py --dataset ptbxl --root synthetic/ptbxl --out cache_synth/ptbxl --workers 1
+python scripts/prepare_data.py --dataset lsas  --root synthetic/lsas  --out cache_synth/lsas  --workers 1
+python scripts/train.py --config configs/smoke.yaml
+python scripts/evaluate.py --run runs/smoke
+```
+
+## Real data
+
+```bash
+python scripts/prepare_data.py --dataset mimic --root /data/mimic-iv-ecg/1.0 --out cache/mimic --workers 16 --max_records 100000
+python scripts/prepare_data.py --dataset ptbxl --root /data/ptb-xl/1.0.3 --out cache/ptbxl
+python scripts/prepare_data.py --dataset lsas  --root /data/ecg-arrhythmia/1.0.0 --out cache/lsas
+python scripts/train.py    --config configs/kaggle_v2.yaml
+python scripts/evaluate.py --run runs/<run_name>
+```
+
+## Reproducing the paper
+
+The experiments were run with the notebooks in `notebooks/`, in order:
+
+1. `kaggle_1_preparation_donnees` – data download and preprocessing
+2. `kaggle_2_entrainement_evaluation` – training and evaluation
+3. `kaggle_3_analyse` – site gate, statistics, calibration
+4. `kaggle_4_file_experiences` – ablations and seeds
+5. `kaggle_5_figures` – figures
+6. `kaggle_6_controle_stt` – STT_ISCH lead-I check
+7. `kaggle_7_audit_mimic` – label audit
+8. `kaggle_8_codes_lsas` – LSAS code-mapping sensitivity
+
+Notebook instructions are in French.
+
+## Label audit
+
+`audit/` contains the stratified sample of 200 MIMIC-IV-ECG reports (`audit_key.csv`: strata and inverse-probability weights), the annotations (`audit_annotations.xlsx`), the cardiologist verification of 51 annotations (`cardiologist_verification.xlsx`), and the resulting weighted precision/recall (`audit_results.csv`, `audit_disagreements.csv`). Report texts come from MIMIC-IV-ECG; as a derived database, this folder is released under the Open Data Commons Open Database License v1.0 (see `audit/LICENSE.md`).
+
+## Citation
+
+If you use this code, please cite the paper (reference to be updated upon publication):
+
+```
+Kazi Tani L.F., Kazi Tani M.Y., Hamza Cherif S. Should an ECG Model Read the Report?
+Annotation-Free Site-Aware Text Gating for Robust Multi-Label Classification.
+Biomedical Signal Processing and Control (submitted), 2026.
+```
+
+## License
+
+Code: MIT (see `LICENSE`). Audit files: ODbL v1.0 (see `audit/LICENSE.md`). The PhysioNet databases remain under their original licences and are not redistributed here. The text encoder uses the public Bio_ClinicalBERT weights (Alsentzer et al., 2019), downloaded from Hugging Face.
