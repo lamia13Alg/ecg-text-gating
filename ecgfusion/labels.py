@@ -9,8 +9,13 @@ On projette tout vers ``LABELS``. Lorsqu'une source n'annote pas
 fiablement une classe, elle est marquée indisponible dans
 ``LABEL_AVAILABILITY`` et exclue des métriques pour ce jeu.
 
-/!\\ Vérifiez les codes SNOMED contre ``ConditionNames_SNOMED-CT.csv``
-fourni avec LSAS-ECG avant toute publication.
+Nomenclature de référence (v2, 2026-11) : les 11 labels sont définis selon les
+recommandations AHA/ACCF/HRS « Standardization and Interpretation of the ECG »
+(Mason 2007, partie II ; Surawicz, Rautaharju, Hancock, Wagner 2009, parties III-VI),
+la définition universelle de l'infarctus (Thygesen 2018) et la recommandation
+ACC/AHA/HRS bradycardie et troubles de conduction (Kusumoto 2019). La table
+complète label -> énoncé AHA -> codes SCP-ECG -> codes SNOMED-CT est dans
+``ecgfusion/nomenclature.py`` (export : ``scripts/export_label_definitions.py``).
 """
 from __future__ import annotations
 
@@ -92,15 +97,24 @@ LSAS_SNOMED_MAP: dict[str, str] = {
     "164890007": "AFIB",   # atrial flutter
     "270492004": "AVB",    # 1st degree AV block
     "195042002": "AVB",    # 2nd degree AV block
+    "54016002": "AVB",     # Mobitz type I (Wenckebach)
+    "28189009": "AVB",     # Mobitz type II
     "27885002": "AVB",     # 3rd degree AV block
+    "233917008": "AVB",    # atrioventricular block (sans degré)
     "164873001": "LVH",    # left ventricular hypertrophy
+    "55827005": "LVH",     # left ventricular hypertrophy (2e code utilisé par LSAS)
     "164934002": "STT_ISCH",  # T wave abnormal
     "59931005": "STT_ISCH",   # T wave inversion
     "429622005": "STT_ISCH",  # ST depression
-    "164930006": "STT_ISCH",  # ST elevation (à vérifier)
+    "164930006": "STT_ISCH",  # ST interval abnormal
+    "164931005": "STT_ISCH",  # ST elevation
+    "428750005": "STT_ISCH",  # nonspecific ST-T abnormality
+    "55930002": "STT_ISCH",   # S-T changes
     "164865005": "MI",     # myocardial infarction
+    "57054005": "MI",      # acute myocardial infarction
     "59118001": "RBBB", "713427006": "RBBB", "713426002": "RBBB",
     "164909002": "LBBB", "733534002": "LBBB",
+    "251120003": "LBBB",   # incomplete LBBB
     "445118002": "FASC",   # left anterior fascicular block
     "445211001": "FASC",   # left posterior fascicular block
     "427084000": "STACH",
@@ -124,12 +138,20 @@ def lsas_codes_to_labels(codes: Iterable[str]) -> np.ndarray:
 MIMIC_TEXT_RULES: dict[str, list[str]] = {
     "NORM": [r"\bnormal ecg\b", r"\bnormal electrocardiogram\b"],
     "AFIB": [r"atrial fibrillation", r"atrial flutter"],
+    # AHA/ACCF/HRS : BAV du 1er degré = PR > 200 ms ; « prolonged PR interval » est le même
+    # énoncé (Kusumoto 2019). « borderline prolonged PR » reste exclu (incertitude).
     "AVB": [r"\b(1st|first|2nd|second|3rd|third)[- ]degree a-?v block",
-            r"\ba-?v block", r"complete heart block", r"mobitz", r"wenckebach"],
+            r"\ba-?v block", r"complete heart block", r"mobitz", r"wenckebach",
+            r"prolonged pr\b", r"\bpr (interval )?prolong", r"\blong pr\b"],
     "LVH": [r"left ventricular hypertrophy", r"\blvh\b"],
+    # Anomalies ST-T PRIMAIRES (Rautaharju 2009, partie IV) : non spécifiques ou ischémiques.
     "STT_ISCH": [r"ischemi", r"st-?t (wave )?(changes|abnormalit)", r"st depression",
                  r"st elevation", r"t wave (changes|abnormalit|inversion)",
-                 r"repolarization abnormalit", r"injury current"],
+                 r"repolarization abnormalit", r"injury current",
+                 r"\bst (segment )?(changes|abnormalit)", r"\bst junctional depression",
+                 r"junctional st depression", r"abnormal t\b", r"\bt abnormalit",
+                 r"\bt[- ]wave abn", r"tall t waves?", r"repol(arization)? abn",
+                 r"non-?specific (st|t)\b"],
     "MI": [r"infarct", r"\bstemi\b", r"\bmi\b"],
     "RBBB": [r"right bundle branch block", r"\brbbb\b"],
     "LBBB": [r"left bundle branch block", r"\blbbb\b"],
@@ -145,7 +167,16 @@ _NEGATION = re.compile(
     r"|\brule out\b|\br/o\b")
 # variantes bénignes / secondaires : ne doivent pas déclencher STT_ISCH
 # (« LVH with secondary repolarization abnormality » = conséquence de l'HVG, pas une ischémie)
-_BENIGN_STT = re.compile(r"early repol|normal variant|juvenile t|persistent juvenile|secondary repol")
+_BENIGN_STT = re.compile(r"early repol|normal variant|juvenile t|persistent juvenile|secondary repol"
+                         r"|secondary (st|t[- ]wave)")
+# Anomalies ST-T SECONDAIRES (Rautaharju 2009, partie IV) : dues à l'HVG, à un bloc de branche,
+# à un trouble de conduction ou à la stimulation -> pas STT_ISCH.
+#   « lateral ST-T changes are probably due to ventricular hypertrophy », « LVH with ST-T changes »
+_SECONDARY_STT = re.compile(
+    r"(due to|secondary to|consistent with|related to)\s+(the\s+)?(left |right )?(ventricular )?"
+    r"(hypertroph|lvh|rvh|bundle|[lr]bbb|ivcd|iv conduction|intraventricular|conduction|pac(ed|ing))"
+    r"|\b(lvh|hypertrophy|[lr]bbb|bundle branch block|ivcd)\b[^,]{0,25}\bwith\b[^,]{0,15}"
+    r"(st|t[- ]wave|repolari)")
 # « otherwise normal ECG » = anomalie ailleurs, pas un ECG normal
 _NOT_NORM = re.compile(r"otherwise normal|except")
 # Diagnostic incertain : « possible / consider / borderline » placé juste avant le terme,
@@ -179,7 +210,9 @@ def mimic_matches(report: str, strict: bool | None = None) -> list[tuple[str, st
         if not s or _NEGATION.search(s):
             continue
         for lab, pats in _COMPILED.items():
-            if lab == "STT_ISCH" and _BENIGN_STT.search(s):
+            # « may be due to hypertrophy and/or ischemia » : l'ischémie n'est pas exclue -> conservé
+            if lab == "STT_ISCH" and (_BENIGN_STT.search(s)
+                                      or (_SECONDARY_STT.search(s) and "ischemi" not in s)):
                 continue
             if lab == "NORM" and _NOT_NORM.search(s):
                 continue

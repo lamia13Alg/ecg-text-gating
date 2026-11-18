@@ -40,11 +40,17 @@ GUIDE = [
     ("NORM", "1 seulement si le compte rendu dit « normal ECG » ET ne mentionne aucune autre des 10 "
              "pathologies. « otherwise normal ECG » → 0. « Borderline ECG » / « Abnormal ECG » ne sont pas des pathologies."),
     ("AFIB", "Fibrillation ou flutter atrial."),
-    ("AVB", "BAV du 1er, 2e (Mobitz, Wenckebach) ou 3e degré. Le « 2:1 » d'un flutter n'est pas un BAV."),
+    ("Référence", "Définitions AHA/ACCF/HRS « Standardization and Interpretation of the ECG » (Mason 2007 ; "
+                  "parties III-VI 2009), définition universelle de l'infarctus (Thygesen 2018), recommandation "
+                  "bradycardie/conduction (Kusumoto 2019)."),
+    ("AVB", "BAV du 1er (PR > 200 ms, y compris « prolonged PR interval »), 2e (Mobitz I/II, Wenckebach) ou "
+            "3e degré. « borderline prolonged PR » → 0. Le « 2:1 » d'un flutter n'est pas un BAV."),
     ("LVH", "Hypertrophie ventriculaire gauche (« LVH », y compris « LVH with secondary repolarization »)."),
-    ("STT_ISCH", "Anomalies ST-T, ischémie, sus/sous-décalage ST, inversion T, courant de lésion. "
-                 "NE PAS compter : repolarisation secondaire (à une HVG ou un bloc), repolarisation précoce, "
-                 "variante normale, ondes T juvéniles."),
+    ("STT_ISCH", "Anomalies ST-T PRIMAIRES : non spécifiques ou évocatrices d'ischémie/lésion (sus/sous-décalage "
+                 "ST, inversion ou anomalie de T, ondes T amples). NE PAS compter les anomalies SECONDAIRES "
+                 "(« due to » HVG, bloc de branche, trouble de conduction, stimulation ; « LVH with ST-T "
+                 "changes »), la repolarisation précoce, les variantes normales, les ondes T juvéniles. "
+                 "« may be due to hypertrophy and/or ischemia » → 1 (ischémie non exclue)."),
     ("MI", "Infarctus, quel que soit l'âge (« age undetermined », « old », « acute ») ; STEMI."),
     ("RBBB / LBBB", "Bloc de branche droit / gauche, complet ou incomplet."),
     ("FASC", "Hémibloc antérieur ou postérieur gauche (« fascicular block », « hemiblock »)."),
@@ -114,10 +120,17 @@ def main():
     ap.add_argument("--n_excluded", type=int, default=35)
     ap.add_argument("--n_total", type=int, default=200)
     ap.add_argument("--seed", type=int, default=2026)
+    ap.add_argument("--exclude", default=None,
+                    help="audit_key.csv d'un audit précédent : ses comptes rendus ne sont pas retirés")
+    ap.add_argument("--prefix", default="A", help="préfixe des identifiants (ex. B pour un 2e audit)")
     a = ap.parse_args()
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     meta = pd.read_csv(Path(a.cache) / "meta.csv", keep_default_na=False)
     meta = meta[meta["valid"].astype(str).str.lower().eq("true") & meta["text"].str.strip().ne("")]
+    if a.exclude:
+        prev_ids = set(pd.read_csv(a.exclude)["record_id"].astype(str))
+        meta = meta[~meta["record_id"].astype(str).isin(prev_ids)]
+        print(f"{len(prev_ids)} comptes rendus de l'audit précédent exclus")
     meta = meta.reset_index(drop=True)
     print(f"{len(meta)} comptes rendus MIMIC valides")
 
@@ -150,7 +163,7 @@ def main():
     rng.shuffle(sel)  # ordre aléatoire : l'annotateur ne voit pas les strates
 
     df = meta.iloc[sel].copy().reset_index(drop=True)
-    df["audit_id"] = [f"A{k + 1:03d}" for k in range(len(df))]
+    df["audit_id"] = [f"{a.prefix}{k + 1:03d}" for k in range(len(df))]
     n_in = df["stratum"].value_counts()
     df["weight"] = df["stratum"].map(lambda s: sizes[s] / n_in[s])
     key = df[["audit_id", "record_id", "stratum", "weight"]].copy()

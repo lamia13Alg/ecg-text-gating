@@ -210,11 +210,25 @@ else:
 # Labels MIMIC recalculés avec les règles actuelles du code (quelques secondes)
 MIMIC = "/tmp/cache_labels/mimic"
 !python scripts/audit_labels.py --cache {SRC}/mimic --relabel --link --quiet --out {MIMIC}
+# LSAS : labels v2 (liste SNOMED-CT complète) recalculés depuis lsas_codes.csv (sortie du notebook 8)
+_codes = sorted(glob.glob("/kaggle/input/**/lsas_codes.csv", recursive=True)
+                + glob.glob("/kaggle/working/lsas_codes.csv"))
+if not _codes:
+    # pas de sortie du notebook 8 : lecture directe des en-têtes LSAS sur PhysioNet (10-15 min, Internet On).
+    # Le fichier est gardé dans la sortie de ce notebook : les reprises suivantes le retrouvent.
+    print("lsas_codes.csv absent des Inputs : lecture des en-têtes LSAS sur PhysioNet (10-15 min)...")
+    !python -c "import sys; sys.path.insert(0, 'scripts'); from lsas_code_check import fetch_codes; fetch_codes().to_csv('/kaggle/working/lsas_codes.csv', index=False)"
+    _codes = glob.glob("/kaggle/working/lsas_codes.csv")
+if not _codes:
+    raise SystemExit("ARRÊT : codes LSAS impossibles à obtenir. Vérifiez que Internet est sur On.")
+print("Codes LSAS :", _codes[0])
+LSAS = "/tmp/cache_labels/lsas"
+!python scripts/relabel_cache.py --dataset lsas --cache {SRC}/lsas --out {LSAS} --codes {_codes[0]}
 PATHS = (f"data.train_cache={MIMIC} "
          f"data.eval_sets.mimic_internal.cache={MIMIC} "
          f"data.eval_sets.mimic_val.cache={MIMIC} data.eval_sets.mimic_val.split=val "
          f"data.eval_sets.ptbxl_external.cache={SRC}/ptbxl "
-         f"data.eval_sets.lsas_external.cache={SRC}/lsas")
+         f"data.eval_sets.lsas_external.cache={LSAS}")
 
 # Reprise automatique : cherche un last.pt dans les Inputs (sortie d'une version précédente)
 prev = sorted(glob.glob(f"/kaggle/input/**/runs/{RUN_NAME}/last.pt", recursive=True))
@@ -370,7 +384,7 @@ for r in runs:
 # ---------------------------------------------------------------------------------------
 _setup_cell = next(c for t, c in TRAIN if "def copy_cache" in c)
 _lines = _setup_cell.splitlines()
-_end = next(i for i, l in enumerate(_lines) if 'lsas_external.cache={SRC}/lsas")' in l)
+_end = next(i for i, l in enumerate(_lines) if 'lsas_external.cache={LSAS}")' in l)
 CACHE_SETUP = "\n".join(l for l in _lines[:_end + 1]
                         if not l.startswith(("CONFIG =", "RUN_NAME =", "RUN =", "MAX_HOURS =")))
 
@@ -443,6 +457,11 @@ for name, conf, extra in EXPERIMENTS:
         print(f"[{name}] repris depuis {prev}")
     st = status(run)
     done_eval = os.path.exists(f"{run}/eval/summary.csv")
+    # run évalué avant le réétiquetage LSAS (labels v2) : on remplace les labels LSAS à partir
+    # des prédictions sauvegardées (CPU, quelques minutes), puis l'analyse est refaite
+    if (done_eval and globals().get("LSAS", "").startswith("/tmp/cache_labels")
+            and not os.path.exists(f"{run}/eval/labels_v2_lsas_external.done")):
+        !python scripts/relabel_eval.py --run {run} --set lsas_external --cache {LSAS}
     done_ana = os.path.exists(f"{run}/analysis/gating.csv")
     if st and st["finished"] and done_eval and done_ana:
         report.append((name, "terminée")); continue
@@ -468,6 +487,8 @@ for name, conf, extra in EXPERIMENTS:
         cmd = shlex.join(["python", "scripts/evaluate.py", "--run", run, "--set", *paths, *extra])
         print(f"\n===== {name} : évaluation")
         !{cmd}
+        if globals().get("LSAS", "").startswith("/tmp/cache_labels") and os.path.exists(f"{run}/eval/summary.csv"):
+            open(f"{run}/eval/labels_v2_lsas_external.done", "w").write("ok\n")
 
     # 3) analyse (CPU)
     if not os.path.exists(f"{run}/analysis/gating.csv"):
@@ -519,7 +540,7 @@ FIGS = [
 # Notebook 5 — Figures de l'article (CPU)
 
 **Réglages :** *Accelerator* **None**. *Input* : le dataset du code + la sortie du notebook 4
-(qui contient le run final `v2_amplitude`, son évaluation et son analyse).
+(ou du notebook 9 : run final `L2_final_s42`, son évaluation et son analyse).
 
 Produit dans `/kaggle/working/figures/` (PDF vectoriel pour la revue + PNG) :
 - `fig1_architecture` — architecture et gating par centre ;
@@ -530,7 +551,7 @@ Produit dans `/kaggle/working/figures/` (PDF vectoriel pour la revue + PNG) :
 """),
     ("code", SETUP),
     ("code", r"""
-RUN_NAME = "v2_amplitude"          # modèle final (graine 42) ; v2_amp_seed1 / v2_amp_seed2 possibles
+RUN_NAME = "L2_final_s42"          # modèle final, labels v2 (graine 42) ; L2_final_s1 / L2_final_s2
 hits = sorted(glob.glob(f"/kaggle/input/**/runs/{RUN_NAME}/eval/summary.csv", recursive=True))
 assert hits, f"Run {RUN_NAME} introuvable : ajoutez la sortie du notebook 4 en Input."
 RUN = os.path.dirname(os.path.dirname(hits[0]))
@@ -564,7 +585,7 @@ Résultats dans `/kaggle/working/stt_check/` : trois tableaux CSV et la figure `
 """),
     ("code", SETUP),
     ("code", r"""
-RUN_NAMES = ["v2_amplitude", "v2_amp_seed1", "v2_amp_seed2"]   # les 3 graines du modèle final
+RUN_NAMES = ["L2_final_s42", "L2_final_s1", "L2_final_s2"]   # les 3 graines du modèle final
 runs = []
 for n in RUN_NAMES:
     hits = sorted(glob.glob(f"/kaggle/input/**/runs/{n}/eval/summary.csv", recursive=True))
@@ -638,7 +659,7 @@ des prédictions déjà sauvegardées (aucun réentraînement). Résultats dans 
     ("code", SETUP),
     ("code", r"""
 runs = []
-for n in ["v2_amplitude", "v2_amp_seed1", "v2_amp_seed2"]:
+for n in ["L2_final_s42", "L2_final_s1", "L2_final_s2"]:
     hits = sorted(glob.glob(f"/kaggle/input/**/runs/{n}/eval/summary.csv", recursive=True))
     if hits:
         runs.append(os.path.dirname(os.path.dirname(hits[0])))
@@ -661,4 +682,158 @@ out = Path(__file__).parent
 (out / "kaggle_6_controle_stt.ipynb").write_text(json.dumps(nb(STT), indent=1, ensure_ascii=False))
 (out / "kaggle_5_figures.ipynb").write_text(json.dumps(nb(FIGS), indent=1, ensure_ascii=False))
 (out / "kaggle_3_analyse.ipynb").write_text(json.dumps(nb(ANALYSIS), indent=1, ensure_ascii=False))
+
+# ---------------------------------------------------------------------------------------
+# Notebook 9 : réentraînement complet avec les labels v2 (nomenclature AHA/ACCF/HRS)
+# ---------------------------------------------------------------------------------------
+_queue_src = next(c for t, c in QUEUE if "EXPERIMENTS = [" in c)
+_exec_cells = [(t, c) for t, c in QUEUE if t == "code" and "def hours_left" in c]
+_tail = QUEUE[QUEUE.index(_exec_cells[0]):]
+RETRAIN = [
+    ("markdown", r"""
+# Notebook 9 — Réentraînement complet, labels v2 (nomenclature AHA/ACCF/HRS)
+
+Les règles d'étiquetage suivent maintenant les recommandations AHA/ACCF/HRS (code ≥ 2026.11.20).
+Tous les modèles de l'article sont réentraînés avec ces labels. Les noms commencent par `L2_`
+pour ne jamais reprendre par erreur un ancien entraînement.
+
+**Réglages :** *Accelerator* **GPU T4** ; *Internet* **On** ;
+*Input* : (1) la **nouvelle version** du dataset du code, (2) la sortie du notebook 1 (cache),
+(3) la sortie du notebook 8 (contient `lsas_codes.csv`).
+
+**Pour continuer après 12 h :** *Add Input* → *Your Work* → sortie de **ce notebook** (dernière version),
+puis *Save & Run All*. Répétez jusqu'à **« FILE D'ATTENTE TERMINÉE »**.
+L'ordre de la liste est l'ordre de priorité : les 3 premiers suffisent pour les résultats principaux.
+"""),
+    ("code", SETUP),
+    ("code", CACHE_SETUP),
+    ("code", r"""
+import ecgfusion; assert ecgfusion.__version__ >= "2026.11.20", "Ancienne version du code en Input"
+V1, V2 = "configs/kaggle.yaml", "configs/kaggle_v2.yaml"
+AMP = "data.signal_norm=fixed"
+EXPERIMENTS = [
+    # --- priorité 1 : modèle final, 3 graines (résultats principaux, gate, calibration, dérivations)
+    ("L2_final_s42",   V2, [AMP]),
+    ("L2_final_s1",    V2, [AMP, "seed=1"]),
+    ("L2_final_s2",    V2, [AMP, "seed=2"]),
+    # --- priorité 2 : ablations clés
+    ("L2_sans_abandon", V2, [AMP, "train.p_drop_text=0", "train.p_drop_features=0", "train.p_drop_leads=0"]),
+    ("L2_bce_s42",     V2, [AMP, "train.loss=bce"]),
+    ("L2_bce_s1",      V2, [AMP, "train.loss=bce", "seed=1"]),
+    ("L2_bce_s2",      V2, [AMP, "train.loss=bce", "seed=2"]),
+    ("L2_signal_seul", V2, [AMP, "train.train_scenario=signal_only", "train.val_scenarios=[signal_only]",
+                            "model.text_encoder=light",
+                            "eval.scenarios=[signal_only,limb6_signal_only,leadI_signal_only]"]),
+    # --- priorité 3 : normalisation par dérivation (z-score) et masquage partiel du texte (v1)
+    ("L2_z_s42",       V2, []),
+    ("L2_z_s1",        V2, ["seed=1"]),
+    ("L2_z_s2",        V2, ["seed=2"]),
+    ("L2_z_bce",       V2, ["train.loss=bce"]),
+    ("L2_v1_masquage", V1, []),
+]
+SESSION_HOURS = 11.0
+EVAL_HOURS = 0.75
+"""),
+] + _tail
+(out / "kaggle_9_reentrainement_labels_v2.ipynb").write_text(json.dumps(nb(RETRAIN), indent=1, ensure_ascii=False))
+
+# ---------------------------------------------------------------------------------------
+# Notebook 10 : audit de validation B (200 nouveaux comptes rendus, labels v2)
+# ---------------------------------------------------------------------------------------
+AUDIT_B = [
+    ("markdown", r"""
+# Notebook 10 — Audit de validation B (CPU, 1 minute)
+
+Les règles v2 ont été corrigées à partir de l'audit A : l'audit A ne peut donc plus servir de
+validation indépendante. Ce notebook tire **200 nouveaux comptes rendus** (aucun de l'audit A),
+avec les consignes alignées sur les recommandations AHA/ACCF/HRS.
+
+**Réglages :** *Accelerator* **None**. *Inputs* : la nouvelle version du dataset du code et la sortie du notebook 1.
+
+Téléchargez `grille_audit_B.xlsx` (à faire remplir par le médecin **sans** lui montrer les étiquettes)
+et `audit_key_B.csv` (à garder pour moi, ne pas ouvrir).
+"""),
+    ("code", SETUP),
+    ("code", r"""
+import ecgfusion; assert ecgfusion.__version__ >= "2026.11.20", "Ancienne version du code en Input"
+metas = sorted(glob.glob("/kaggle/input/**/mimic/meta.csv", recursive=True))
+assert metas, "meta.csv MIMIC introuvable : ajoutez la sortie du notebook 1 en Input."
+CACHE = os.path.dirname(metas[0]); print("Cache MIMIC :", CACHE)
+!python scripts/audit_sample.py --cache {CACHE} --out /kaggle/working/audit_B --exclude audit/audit_key_A.csv --prefix B --seed 2027
+os.rename("/kaggle/working/audit_B/grille_audit_mimic.xlsx", "/kaggle/working/audit_B/grille_audit_B.xlsx")
+os.rename("/kaggle/working/audit_B/audit_key.csv", "/kaggle/working/audit_B/audit_key_B.csv")
+from IPython.display import FileLink, display
+os.chdir("/kaggle/working")   # FileLink attend un chemin relatif à /kaggle/working
+for f in ["grille_audit_B.xlsx", "audit_key_B.csv"]:
+    display(FileLink(f"audit_B/{f}"))
+"""),
+]
+(out / "kaggle_10_audit_validation_B.ipynb").write_text(json.dumps(nb(AUDIT_B), indent=1, ensure_ascii=False))
+
+# ---------------------------------------------------------------------------------------
+# Notebook 11 : figures finales, contrôle STT et export des résultats (labels v2)
+# ---------------------------------------------------------------------------------------
+FINAL = [
+    ("markdown", r"""
+# Notebook 11 — Figures, contrôle STT et export des résultats (CPU, ~30 min)
+
+Remplace les notebooks 3, 5 et 6 pour la version finale (labels v2).
+
+**Réglages :** *Accelerator* **None** ; *Internet* **On** (téléchargement de `ptbxl_database.csv`).
+*Inputs* : le dataset du code, la sortie du notebook 1 (cache) et la **sortie finale du notebook 9**
+(celle qui affiche « FILE D'ATTENTE TERMINÉE »).
+
+À la fin, téléchargez **un seul fichier** : `resultats_finaux.zip` (lien affiché en bas).
+"""),
+    ("code", SETUP),
+    ("code", r"""
+import ecgfusion, json, zipfile
+assert ecgfusion.__version__ >= "2026.11.20", "Ancienne version du code en Input"
+runs = {os.path.basename(os.path.dirname(os.path.dirname(p))): os.path.dirname(os.path.dirname(p))
+        for p in glob.glob("/kaggle/input/**/runs/L2_*/eval/summary.csv", recursive=True)}
+print(len(runs), "runs :", sorted(runs))
+assert len(runs) == 13, "Il faut les 13 runs L2_* : ajoutez la sortie FINALE du notebook 9 en Input."
+OUT = "/kaggle/working/final"
+os.makedirs(OUT, exist_ok=True)
+FINAL_RUNS = [runs[n] for n in ["L2_final_s42", "L2_final_s1", "L2_final_s2"]]
+"""),
+    ("code", r"""
+# 1) Figures de l'article (modèle final, graine 42) : architecture, effets par pathologie, gate, calibration
+!python scripts/fig_architecture.py --out {OUT}/figures
+!python scripts/make_figures.py --run {FINAL_RUNS[0]} --out {OUT}/figures
+"""),
+    ("code", r"""
+# 2) Contrôle STT_ISCH en dérivation I (3 graines du modèle final)
+metas = sorted(glob.glob("/kaggle/input/**/cache/ptbxl/meta.csv", recursive=True))
+PTB = os.path.dirname(metas[0]) if metas else None
+cmd = ["python", "scripts/stt_lead_check.py", "--runs", *FINAL_RUNS, "--out", f"{OUT}/stt_check"]
+if PTB:
+    cmd += ["--ptbxl_cache", PTB]
+!{shlex.join(cmd) if 'shlex' in globals() else ' '.join(cmd)}
+""".replace("!{shlex.join(cmd) if 'shlex' in globals() else ' '.join(cmd)}", "import shlex\n!{shlex.join(cmd)}")),
+    ("code", r"""
+# 3) Export : tous les tableaux (CSV/JSON) des 13 runs + figures + contrôle STT, sans les prédictions brutes
+keep_ext = (".csv", ".json", ".yaml", ".pdf", ".png", ".done")
+zpath = "/kaggle/working/resultats_finaux.zip"
+n = 0
+with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+    for name, r in sorted(runs.items()):
+        for f in glob.glob(f"{r}/**/*", recursive=True):
+            if os.path.isfile(f) and f.endswith(keep_ext) and "/reliability_" not in f:
+                z.write(f, f"runs/{name}/" + os.path.relpath(f, r)); n += 1
+    for f in glob.glob(f"{OUT}/**/*", recursive=True):
+        if os.path.isfile(f):
+            z.write(f, os.path.relpath(f, OUT)); n += 1
+    for f in glob.glob("/kaggle/input/**/lsas_codes.csv", recursive=True)[:1]:
+        z.write(f, "lsas_codes.csv"); n += 1
+print(f"{n} fichiers -> {zpath} ({os.path.getsize(zpath) / 1e6:.1f} Mo)")
+os.chdir("/kaggle/working")
+from IPython.display import FileLink, display
+display(FileLink("resultats_finaux.zip"))
+"""),
+]
+(out / "kaggle_11_figures_export_final.ipynb").write_text(json.dumps(nb(FINAL), indent=1, ensure_ascii=False))
+
+
+
 print("notebooks écrits dans", out)

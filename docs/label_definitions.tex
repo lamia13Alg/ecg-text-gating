@@ -1,0 +1,17 @@
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{1.5cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{3.4cm}}
+\toprule
+Label & Definition (AHA/ACCF/HRS statement) & SCP-ECG (PTB-XL) & SNOMED-CT (LSAS) \\
+\midrule
+\lbl{NORM} & Normal ECG with no other labelled abnormality~\cite{mason2007} & NORM & 426783006 (sinus rhythm, no other code) \\
+\lbl{AFIB} & Atrial fibrillation or atrial flutter (merged)~\cite{mason2007} & AFIB AFLT & 164889003 164890007 \\
+\lbl{AVB} & Any degree of AV block; first degree = PR interval $>$ 200 ms (stated as first-degree AV block or prolonged PR interval)~\cite{mason2007,kusumoto2019} & 1AVB 2AVB 3AVB & 195042002 233917008 270492004 27885002 28189009 54016002 \\
+\lbl{LVH} & Left ventricular hypertrophy by voltage and/or non-voltage criteria~\cite{mason2007,hancock2009} & LVH & 164873001 55827005 \\
+\lbl{STT\_ISCH} & Primary ST-segment or T-wave abnormality, non-specific or suggestive of ischaemia/injury; secondary changes (hypertrophy, bundle branch block, conduction delay, pacing), early repolarisation and normal variants excluded~\cite{mason2007,rautaharju2009,wagner2009} & INJAL INJAS INJIL INJIN INJLA ISCAL ISCAN ISCAS ISCIL ISCIN ISCLA ISC\_ NDT NST\_ STD\_ & 164930006 164931005 164934002 428750005 429622005 55930002 59931005 \\
+\lbl{MI} & ECG pattern of myocardial infarction (acute or prior, e.g. pathological Q waves), as stated by the reader~\cite{mason2007,wagner2009,thygesen2018} & ALMI AMI ASMI ILMI IMI IPLMI IPMI LMI PMI & 164865005 57054005 \\
+\lbl{RBBB} & Complete (QRS $\geq$ 120 ms) or incomplete (110-119 ms) RBBB (merged)~\cite{mason2007,surawicz2009} & CRBBB IRBBB & 59118001 713426002 713427006 \\
+\lbl{LBBB} & Complete (QRS $\geq$ 120 ms) or incomplete (110-119 ms) LBBB (merged)~\cite{mason2007,surawicz2009} & CLBBB ILBBB & 164909002 251120003 733534002 \\
+\lbl{FASC} & Left anterior or left posterior fascicular block (merged)~\cite{mason2007,surawicz2009} & LAFB LPFB & 445118002 445211001 \\
+\lbl{STACH} & Sinus tachycardia, as stated by the reader~\cite{mason2007} & STACH & 427084000 \\
+\lbl{SBRAD} & Sinus bradycardia, as stated by the reader~\cite{mason2007} & SBRAD & 426177001 \\
+\bottomrule
+\end{tabularx}

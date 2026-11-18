@@ -10,7 +10,7 @@ Trois contrôles, à partir des prédictions déjà sauvegardées (no_text vs le
   C. AUROC par type d'annotation STT de PTB-XL (NDT, NST_, STD_, ISC*, INJ*) et par probabilité
      (likelihood) — nécessite ptbxl_database.csv (téléchargé automatiquement si absent).
 
-  python scripts/stt_lead_check.py --runs runs/v2_amplitude runs/v2_amp_seed1 runs/v2_amp_seed2 \
+  python scripts/stt_lead_check.py --runs runs/L2_final_s42 runs/L2_final_s1 runs/L2_final_s2 \
       --ptbxl_cache /kaggle/working/cache/ptbxl --out stt_check/
 """
 import argparse

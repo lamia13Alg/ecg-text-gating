@@ -1,0 +1,12 @@
+label,aha_statement,definition,scp_ecg_codes,snomed_ct_codes,references
+NORM,Normal ECG,Normal ECG with no other labelled abnormality,NORM,"426783006 (sinus rhythm, no other code)",mason2007
+AFIB,Atrial fibrillation; atrial flutter,Atrial fibrillation or atrial flutter (merged),AFIB AFLT,164889003 164890007,mason2007
+AVB,"First-, second- (Mobitz I/II) and third-degree AV block",Any degree of AV block; first degree = PR interval > 200 ms (stated as first-degree AV block or prolonged PR interval),1AVB 2AVB 3AVB,195042002 233917008 270492004 27885002 28189009 54016002,mason2007 kusumoto2019
+LVH,Left ventricular hypertrophy,Left ventricular hypertrophy by voltage and/or non-voltage criteria,LVH,164873001 55827005,mason2007 hancock2009
+STT_ISCH,ST deviation; T-wave abnormality (primary); suggestive of ischaemia/injury,"Primary ST-segment or T-wave abnormality, non-specific or suggestive of ischaemia/injury; secondary changes (hypertrophy, bundle branch block, conduction delay, pacing), early repolarisation and normal variants excluded",INJAL INJAS INJIL INJIN INJLA ISCAL ISCAN ISCAS ISCIL ISCIN ISCLA ISC_ NDT NST_ STD_,164930006 164931005 164934002 428750005 429622005 55930002 59931005,mason2007 rautaharju2009 wagner2009
+MI,Myocardial infarction (any age),"ECG pattern of myocardial infarction (acute or prior, e.g. pathological Q waves), as stated by the reader",ALMI AMI ASMI ILMI IMI IPLMI IPMI LMI PMI,164865005 57054005,mason2007 wagner2009 thygesen2018
+RBBB,Complete or incomplete right bundle branch block,Complete (QRS >= 120 ms) or incomplete (110-119 ms) RBBB (merged),CRBBB IRBBB,59118001 713426002 713427006,mason2007 surawicz2009
+LBBB,Complete or incomplete left bundle branch block,Complete (QRS >= 120 ms) or incomplete (110-119 ms) LBBB (merged),CLBBB ILBBB,164909002 251120003 733534002,mason2007 surawicz2009
+FASC,Left anterior or left posterior fascicular block,Left anterior or left posterior fascicular block (merged),LAFB LPFB,445118002 445211001,mason2007 surawicz2009
+STACH,Sinus tachycardia,"Sinus tachycardia, as stated by the reader",STACH,427084000,mason2007
+SBRAD,Sinus bradycardia,"Sinus bradycardia, as stated by the reader",SBRAD,426177001,mason2007
